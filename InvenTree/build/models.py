@@ -868,6 +868,16 @@ class Build(MPTTModel, InvenTree.models.InvenTreeBarcodeMixin, InvenTree.models.
         status = kwargs.get('status', StockStatus.OK)
         notes = kwargs.get('notes', '')
 
+        if not self.is_fully_allocated(None) and self.is_fully_allocated(output):
+            raise RuntimeError('Cannot complete build with unallocated parts!')
+
+        purchase_price = 0.0
+        for item in self.allocated_stock.all():
+            if not item.stock_item.purchase_price:
+                raise RuntimeError('Stock item has no purchase price!')
+            purchase_price += item.stock_item.purchase_price
+        output.purchase_price = purchase_price
+
         # List the allocated BuildItem objects for the given output
         allocated_items = output.items_to_install.all()
 
