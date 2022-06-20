@@ -621,12 +621,19 @@ class PurchaseOrder(TotalPriceMixin, Order):
             else:
                 unit_purchase_price = None
 
-            # Determine if we should individually serialize the items, or not
-            if type(serials) is list and len(serials) > 0:
-                serialize = True
-            else:
-                serialize = False
-                serials = [None]
+            # Trackable parts must be serializable somehow...
+            if line.part.part.trackable:
+                # First try explicitly provided serials
+                if type(serials) is list and len(serials) > 0:
+                    serialize = True
+                # If not, see if there's a batch-code we can generate from
+                elif batch_code != '':
+                    serials = ['%s%s' % (batch_code, n) for n in range(int(quantity))]
+                    serialize = True
+                else:
+                    raise ValidationError(
+                        _("Trackable parts must have serial numbers (or a batch code)!")
+                    )
 
             for sn in serials:
 
@@ -663,7 +670,7 @@ class PurchaseOrder(TotalPriceMixin, Order):
                     deltas=tracking_info,
                     location=location,
                     purchaseorder=self,
-                    quantity=quantity
+                    quantity=1 if serialize else quantity
                 )
 
         # Update the number of parts received against the particular line item
