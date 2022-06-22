@@ -634,6 +634,9 @@ class PurchaseOrder(TotalPriceMixin, Order):
                     raise ValidationError(
                         _("Trackable parts must have serial numbers (or a batch code)!")
                     )
+            else:
+                serialize = False
+                serials = [None]
 
             for sn in serials:
 
