@@ -871,12 +871,16 @@ class Build(MPTTModel, InvenTree.models.InvenTreeBarcodeMixin, InvenTree.models.
         if not self.is_fully_allocated(None) and self.is_fully_allocated(output):
             raise RuntimeError('Cannot complete build with unallocated parts!')
 
+        # Calculate the purchase price, from the some of BOM item purchase prices.
+        # Start with the untracked items.
         purchase_price = 0.0
-        for item in self.allocated_stock.all():
+        items = self.allocated_stock.filter(
+                stock_item__part__trackable=False
+        )
+        for item in items:
             if not item.stock_item.purchase_price:
                 raise RuntimeError('Stock item has no purchase price!')
             purchase_price += item.stock_item.purchase_price
-        output.purchase_price = purchase_price
 
         # List the allocated BuildItem objects for the given output
         allocated_items = output.items_to_install.all()
@@ -884,6 +888,11 @@ class Build(MPTTModel, InvenTree.models.InvenTreeBarcodeMixin, InvenTree.models.
         for build_item in allocated_items:
             # Complete the allocation of stock for that item
             build_item.complete_allocation(user)
+            # And add to the purchase price.
+            purchase_price += build_item.stock_item.purchase_price
+
+        # Record total 'purchase_price' into the new output.
+        output.purchase_price = purchase_price
 
         # Delete the BuildItem objects from the database
         allocated_items.all().delete()
