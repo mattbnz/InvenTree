@@ -3,13 +3,16 @@
 # hence the need to recalculate...
 #
 # run as python manage.py < scripts/recalculate_built_prices.py
+from django.db.models import Avg
 
-from InvenTree.status_codes import StockHistoryCode
+from InvenTree.status_codes import StockHistoryCode, BuildStatus
 from build.models import Build
 from stock.models import StockItemTracking
 
 builds = Build.objects.all()
 for b in builds:
+  if b.status != BuildStatus.COMPLETE:
+    continue
   print(f'Checking Build {b.pk} - {b.title}')
   # Build lookup of bom quantities
   q = {}
@@ -17,13 +20,12 @@ for b in builds:
     q[i.sub_part.pk] = i.quantity
   # Find untracked stock items which contributed to this build
   base_price = 0.0
-  for i in StockItemTracking.objects.filter(tracking_type=StockHistoryCode.BUILD_CONSUMED):
-    if i.deltas.get('buildorder', -1) != b.pk:
-      continue
-    price =  i.item.purchase_price * q[i.item.part.pk]
-    print(f' + {price} for {i.item.part.name} x{q[i.item.part.pk]} ({i.item.purchase_price}/each) {i.id}')
-    base_price += price
-  print(f' = Sub-total for untracked parts is ${base_price}')
+  qs = StockItemTracking.objects.filter(tracking_type=StockHistoryCode.BUILD_CONSUMED, deltas__buildorder=b.pk)
+  for i in qs.values('item__part__pk', 'item__part__name').annotate(avg_price=Avg('item__purchase_price')):
+    price =  i['avg_price'] * q[i['item__part__pk']]
+    print(f' + {price:.4f} for {i["item__part__name"]} x{q[i["item__part__pk"]]} ({i["avg_price"]:.4f}/each (avg))')
+    base_price += float(price)
+  print(f' = Sub-total for untracked parts is ${base_price:.4f}')
 
   # Now iterate the outputs and look for tracked stock items
   for o in b.build_outputs.all():
@@ -33,9 +35,9 @@ for b in builds:
     price = base_price
     for i in o.installed_parts.all():
       print(f'  + {i.purchase_price} for {i.part.name} with serial #{i.serial}')
-      price += i.purchase_price
-    print(f'  = ${price} expected purchase_price')
-    if price != o.purchase_price:
+      price += float(i.purchase_price.amount)
+    print(f'  = ${price:.4f} expected purchase_price')
+    if round(price, 4) != round(float(o.purchase_price.amount),4):
       o.purchase_price = price
       o.save()
       print(f'  ! FIXED!')
