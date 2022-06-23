@@ -1233,7 +1233,10 @@ class BuildItem(models.Model):
             item.take_stock(
                 self.quantity,
                 user,
-                code=StockHistoryCode.BUILD_CONSUMED
+                code=StockHistoryCode.BUILD_CONSUMED,
+                tracking_info = {
+                    'buildorder': self.build.pk
+                }
             )
 
     def getStockItemThumbnail(self):

@@ -2488,6 +2488,26 @@ function loadStockTrackingTable(table, options) {
                 html += '</td></tr>';
             }
 
+            // Build Order Information
+            if (details.buildorder) {
+
+                html += `<tr><th>{% trans "Build Order" %}</td>`;
+
+                html += '<td>';
+
+                if (details.buildorder_detail) {
+                    html += renderLink(
+                        details.buildorder_detail.reference,
+                        `/build/${details.buildorder}/`
+                    );
+                } else {
+                    html += `<i>{% trans "Build order no longer exists" %}</i>`;
+                }
+
+                html += '</td></tr>';
+            }
+
+
             // Customer information
             if (details.customer) {
 

@@ -20,6 +20,7 @@ import common.models
 import common.settings
 import stock.serializers as StockSerializers
 from build.models import Build
+from build.serializers import BuildSerializer
 from company.models import Company, SupplierPart
 from company.serializers import CompanySerializer, SupplierPartSerializer
 from InvenTree.api import (APIDownloadMixin, AttachmentMixin,
@@ -1265,6 +1266,15 @@ class StockTrackingList(ListAPI):
                     serializer = PurchaseOrderSerializer(order)
                     deltas['purchaseorder_detail'] = serializer.data
                 except Exception:
+                    pass
+
+            # Add buildorder detail
+            if 'buildorder' in deltas:
+                try:
+                    order = Build.objects.get(pk=deltas['buildorder'])
+                    serializer = BuildSerializer(order)
+                    deltas['buildorder_detail'] = serializer.data
+                except Exception as e:
                     pass
 
         if request.is_ajax():

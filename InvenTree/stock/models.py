@@ -1656,7 +1656,7 @@ class StockItem(MetadataMixin, MPTTModel):
         return True
 
     @transaction.atomic
-    def take_stock(self, quantity, user, notes='', code=StockHistoryCode.STOCK_REMOVE):
+    def take_stock(self, quantity, user, notes='', code=StockHistoryCode.STOCK_REMOVE, tracking_info=None):
         """Remove items from stock."""
         # Cannot remove items from a serialized part
         if self.serialized:
@@ -1670,16 +1670,21 @@ class StockItem(MetadataMixin, MPTTModel):
         if quantity <= 0 or self.infinite:
             return False
 
+        deltas = {
+                'removed': float(quantity),
+                'quantity': float(self.quantity),
+                }
+
+        if tracking_info:
+            deltas.update(tracking_info)
+
         if self.updateQuantity(self.quantity - quantity):
 
             self.add_tracking_entry(
                 code,
                 user,
                 notes=notes,
-                deltas={
-                    'removed': float(quantity),
-                    'quantity': float(self.quantity),
-                }
+                deltas=deltas
             )
 
         return True
