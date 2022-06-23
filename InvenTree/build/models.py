@@ -9,7 +9,7 @@ from django.contrib.auth.models import User
 from django.core.exceptions import ValidationError
 from django.core.validators import MinValueValidator
 from django.db import models, transaction
-from django.db.models import Sum, Q
+from django.db.models import Avg, Sum, Q
 from django.db.models.functions import Coalesce
 from django.db.models.signals import post_save
 from django.dispatch.dispatcher import receiver
@@ -871,16 +871,21 @@ class Build(MPTTModel, InvenTree.models.InvenTreeBarcodeMixin, InvenTree.models.
         if not self.is_fully_allocated(None) and self.is_fully_allocated(output):
             raise RuntimeError('Cannot complete build with unallocated parts!')
 
-        # Calculate the purchase price, from the some of BOM item purchase prices.
-        # Start with the untracked items.
+        # Calculate the purchase price, from the sum of BOM item purchase prices.
+        untracked_items = self.allocated_stock.filter(stock_item__part__trackable=False)
+        if untracked_items.filter(stock_item__purchase_price__isnull=True).count() != 0:
+            raise RuntimeError(f'Cannot complete build with unpriced stock items!')
+
+        # Build lookup of bom quantities
+        q = {}
+        for i in self.untracked_bom_items:
+            q[i.sub_part.pk] = i.quantity
+
         purchase_price = 0.0
-        items = self.allocated_stock.filter(
-                stock_item__part__trackable=False
-        )
-        for item in items:
-            if not item.stock_item.purchase_price:
-                raise RuntimeError('Stock item has no purchase price!')
-            purchase_price += item.stock_item.purchase_price
+        qs = untracked_items.values('stock_item__part__pk', 'stock_item__part__name')
+        for item in qs.annotate(avg_price=Avg('stock_item__purchase_price')):
+            price = item['avg_price'] * q[item['stock_item__part__pk']]
+            purchase_price += float(price)
 
         # List the allocated BuildItem objects for the given output
         allocated_items = output.items_to_install.all()
@@ -889,7 +894,7 @@ class Build(MPTTModel, InvenTree.models.InvenTreeBarcodeMixin, InvenTree.models.
             # Complete the allocation of stock for that item
             build_item.complete_allocation(user)
             # And add to the purchase price.
-            purchase_price += build_item.stock_item.purchase_price
+            purchase_price += float(build_item.stock_item.purchase_price.amount)
 
         # Record total 'purchase_price' into the new output.
         output.purchase_price = purchase_price
