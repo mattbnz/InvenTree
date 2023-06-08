@@ -62,6 +62,8 @@ def find_buildstock(build, si_list):
 
 def find_stockitem_part_po(part, po, si_list):
     for si in si_list:
+        if si['consumed_by']:
+            continue
         if si['part'] == part and si['purchase_order'] == po:
             return si
     return None
