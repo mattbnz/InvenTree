@@ -60,6 +60,12 @@ def find_buildstock(build, si_list):
             rv.append(si)
     return rv
 
+def find_stockitem_in(part, parent, si_list):
+    for si in si_list:
+        if si['part'] == part and si['belongs_to'] == parent:
+            return si
+    return None
+
 def find_stockitem_part_po(part, po, si_list):
     for si in si_list:
         if si['consumed_by']:
@@ -318,3 +324,33 @@ for k in sorted(src_bos.keys()):
             update_field2('stock_stockitemtracking', 'item_id', t2, 'tracking_type', 57, 'date', last_build)
             update_field2('stock_stockitemtracking', 'item_id', t2, 'tracking_type', 40, 'date', last_build)
             update_field_by_id('stock_stockitem', t2, 'updated', last_build)
+        # Update stock list with new stokc
+        dst_stock = getDict('dev', 'stock/')
+    # Before moving on, check if any of the resulting stock items have further events that need to be processed
+    for item in find_buildstock(k, src_stock.values()):
+        for ai in list(filter(lambda x: x['item'] == item['pk'] and x['tracking_type'] in(36, 5), sT.values())):
+            serial = item['serial']
+            di = find_stockitem_part_po_serial(item['part'], None, serial, dst_stock.values())
+            if ai['tracking_type'] == 36:
+                # Need to detach an item from this item.
+                rp = src_stock[ai['deltas']['stockitem']]
+                ri = find_stockitem_in(rp['part'], di['pk'], dst_stock.values())
+                if not ri:
+                    logging.critical(f'Unable to find {rp["part"]} in {di["pk"]}')
+                    sys.exit(1)
+                data = {
+                    'location': 2,
+                    'note': ai['notes'],
+                }
+                response = request(requests.post, 'dev', f'stock/{ri["pk"]}/uninstall/', json=data)
+                update_field_by_id('stock_stockitem', ri['pk'], 'updated', ai['date'])
+                update_field2('stock_stockitemtracking', 'item_id', di['pk'], 'tracking_type', 36, 'date', ai['date'])
+                update_field2('stock_stockitemtracking', 'item_id', ri['pk'], 'tracking_type', 31, 'date', ai['date'])
+                logging.info(f'  - Removed {ri["pk"]} from {di["pk"]} on {ai["date"]}: {ai["notes"]}')
+            elif ai['tracking_type'] == 5:
+                data = ai['deltas']
+                # Need to detach an item from this item.
+                response = request(requests.patch, 'dev', f'stock/{di["pk"]}/', json=data)
+                update_field_by_id('stock_stockitem', di['pk'], 'updated', ai['date'])
+                update_field2('stock_stockitemtracking', 'item_id', di['pk'], 'tracking_type', 5, 'date', ai['date'])
+                logging.info(f'  - Updated {di["pk"]} status to {data} on {ai["date"]}: {ai["notes"]}')
