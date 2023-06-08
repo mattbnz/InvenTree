@@ -86,28 +86,29 @@ def update_field_by_id(table, pk, field, data):
     db = sqlite3.connect(os.path.expanduser('~/database.sqlite3'))
     cur = db.cursor()
     res = cur.execute(f"UPDATE {table} SET {field} = ? WHERE id = ?", (data, pk))
-    if res.rowcount != 1:
-        raise Exception(f"Failed to update {table} {pk} {field} to {data}")
     cur.close()
     db.commit()
+    if res.rowcount != 1:
+        raise Exception(f"Failed to update {table} {pk} {field} to {data}")
+
 
 def update_field(table, w1field, w1val, field, data):
     db = sqlite3.connect(os.path.expanduser('~/database.sqlite3'))
     cur = db.cursor()
     res = cur.execute(f"UPDATE {table} SET {field} = ? WHERE {w1field} = ?", (data, w1val))
-    if res.rowcount <= 0:
-        raise Exception(f"Failed to update {table} {w1field}={w1val} {field} to {data}")
     cur.close()
     db.commit()
+    if res.rowcount <= 0:
+        raise Exception(f"Failed to update {table} {w1field}={w1val} {field} to {data}")
 
 def update_field2(table, w1field, w1val, w2field, w2val, field, data):
     db = sqlite3.connect(os.path.expanduser('~/database.sqlite3'))
     cur = db.cursor()
     res = cur.execute(f"UPDATE {table} SET {field} = ? WHERE {w1field} = ? AND {w2field} = ?", (data, w1val, w2val))
-    if res.rowcount <= 0:
-        raise Exception(f"Failed to update {table} {w1field}={w1val} AND {w2field}={w2val} {field} to {data}")
     cur.close()
     db.commit()
+    if res.rowcount <= 0:
+        raise Exception(f"Failed to update {table} {w1field}={w1val} AND {w2field}={w2val} {field} to {data}")
 
 def update_fieldN(table, where, field, data):
     db = sqlite3.connect(os.path.expanduser('~/database.sqlite3'))
@@ -120,19 +121,21 @@ def update_fieldN(table, where, field, data):
         d.append(value)
     w = " AND ".join(w)
     res = cur.execute(f"{q} {w}", d)
-    if res.rowcount <= 0:
-        raise Exception(f"Failed to update {table} {q} {w}: {d}")
     cur.close()
     db.commit()
+    if res.rowcount <= 0:
+        raise Exception(f"Failed to update {table} {q} {w}: {d}")
+
 
 def update_field_like(table, limitfield, like, field, data):
     db = sqlite3.connect(os.path.expanduser('~/database.sqlite3'))
     cur = db.cursor()
     res = cur.execute(f"UPDATE {table} SET {field} = ? WHERE {limitfield} LIKE ?", (data, like))
-    if res.rowcount <= 0:
-        raise Exception(f"Failed to update {table} {limitfield} like {like} {field} to {data}")
     cur.close()
     db.commit()
+    if res.rowcount <= 0:
+        raise Exception(f"Failed to update {table} {limitfield} like {like} {field} to {data}")
+
 
 def find_ids(table, w1field, w1like, w2field, w2val):
     db = sqlite3.connect(os.path.expanduser('~/database.sqlite3'))
