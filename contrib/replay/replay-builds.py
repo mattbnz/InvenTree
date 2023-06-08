@@ -77,9 +77,13 @@ def find_stockitem_part_po(part, po, si_list):
 def find_stockitem_part_po_serial(part, po, serial, si_list):
     if serial == "DK1":
         serial = "DK0"
+    elif serial == "KPA":
+        serial = "KPA0"
+    elif serial == "KPB":
+        serial = "KPB0"
     for si in si_list:
         if si['part'] == part and si['purchase_order'] == po:
-            if si['serial'] == serial or re.sub(r'-(\d+)$', r'\1', si['serial']) == serial:
+            if si['serial'] == serial or si['serial'].replace("-", "") == serial:
                 return si
     return None
 
