@@ -138,12 +138,27 @@ def findBS(part, bs_list):
     return None
 
 def findSIviaST(build, part, st_list):
+    # We have some missing data for SSD in the original DB, so fake up our best guess...
+    if build == 1 and part == 20:
+        return {
+            -1: ({'purchase_order': 8}, 3)
+        }
+    elif build == 2 and part == 20:
+        return {
+            -1: ({'purchase_order': 4}, 1)
+        }
+    elif build == 3 and part == 20:
+        return {
+            -1: ({'purchase_order': 4}, 1)
+        }
+    rv = dict()
     for st in st_list:
         if 'buildorder' in st['deltas'] and st['deltas']['buildorder'] == build:
             si = src_stock[st['item']]
             if si['part'] == part:
-                return si
-    return None
+                rv[si['pk']] = (si, st['deltas']['removed'])
+
+    return rv
 
 
 def allocateStock(dst):
@@ -166,24 +181,29 @@ def allocateStock(dst):
             ids.append(si["pk"])
             continue
         else:
-            logging.info(f' - needs {bI["sub_part"]} x {bI["quantity"]};')
+            logging.info(f' - needs part {bI["sub_part"]} x {bI["quantity"]} x {dst["quantity"]}')
             oSi = findSIviaST(dst['pk'], bI['sub_part'], sT.values())
-            if not oSi:
+            if len(oSi) == 0:
                 logging.critical(f' ! ERROR - could not find tracking entry for {bI["sub_part"]} in build #{dst["pk"]}')
                 sys.exit(1)
-            logging.info(f'   + src used stock item {oSi["pk"]} from PO#{oSi["purchase_order"]}')
-            si = find_stockitem_part_po(bI['sub_part'], oSi['purchase_order'], dst_stock.values())
-            if not si:
-                logging.critical(f' ! ERROR - no matching stock item!')
+            found = 0
+            for oSiPK, v in oSi.items():
+                logging.info(f'   + src used stock item {oSiPK} from PO#{v[0]["purchase_order"]} x {v[1]}')
+                si = find_stockitem_part_po(bI['sub_part'], v[0]['purchase_order'], dst_stock.values())
+                if not si:
+                    logging.critical(f' ! ERROR - no matching stock item!')
+                    sys.exit(1)
+                logging.info(f'   + using stock item #{si["pk"]}')
+                ids.append(si["pk"])
+                items.append({
+                        'bom_item': bI['pk'],
+                        'stock_item': si['pk'],
+                        'quantity': v[1],
+                    })
+                found += v[1]
+            if found != bI['quantity'] * dst['quantity']:
+                logging.critical(f' ! ERROR - only found {found} stock for part {bI["sub_part"]} needed {bI["quantity"]} x {dst["quantity"]}')
                 sys.exit(1)
-
-            logging.info(f'   + using stock item #{si["pk"]}')
-            ids.append(si["pk"])
-            items.append({
-                    'bom_item': bI['pk'],
-                    'stock_item': si['pk'],
-                    'quantity': bI['quantity'] * dst['quantity'],
-                })
     if items:
         data = {
             'items': items,
