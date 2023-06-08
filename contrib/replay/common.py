@@ -119,7 +119,6 @@ def update_fieldN(table, where, field, data):
         w.append(f"{field} = ?")
         d.append(value)
     w = " AND ".join(w)
-    print(f"{q} {w}", d)
     res = cur.execute(f"{q} {w}", d)
     if res.rowcount <= 0:
         raise Exception(f"Failed to update {table} {q} {w}: {d}")

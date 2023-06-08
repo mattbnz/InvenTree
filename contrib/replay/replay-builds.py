@@ -24,7 +24,7 @@ from common import *
 def create_bo(src_bo):
     data = {
         "creation_date": src_bo['creation_date'],
-        "title": src_bo['title'],
+        "title": src_bo['title'].replace("&amp;", "&"),
         "destination": src_bo['destination'],
         "parent": src_bo['parent'],
         "part": src_bo['part'],
@@ -312,6 +312,12 @@ for k in sorted(src_bos.keys()):
         logging.info(f'Build #{k} is not in dev')
         dst = create_bo(src_bos[k])
     logging.info(f'Build #{k} is #{dst["pk"]}')
+    if src_bos[k]['status'] == 30:
+        if dst['status'] != 30:
+            data = {'remove_allocated_stock': False, 'remove_incomplete_outputs': False}
+            response = request(requests.post, 'dev', f'build/{dst["pk"]}/cancel/', json=data)
+            logging.info(f'  - Marked {dst["pk"]} as cancelled')
+        continue
     # Allocate untracked stock if we're not completed
     stock_ids = list()
     if dst['completed'] < dst['quantity']:
@@ -349,8 +355,7 @@ for k in sorted(src_bos.keys()):
                 rp = src_stock[ai['deltas']['stockitem']]
                 ri = find_stockitem_in(rp['part'], di['pk'], dst_stock.values())
                 if not ri:
-                    logging.critical(f'Unable to find {rp["part"]} in {di["pk"]}')
-                    sys.exit(1)
+                    continue # Already done I guess
                 data = {
                     'location': 2,
                     'note': ai['notes'],
@@ -362,7 +367,9 @@ for k in sorted(src_bos.keys()):
                 logging.info(f'  - Removed {ri["pk"]} from {di["pk"]} on {ai["date"]}: {ai["notes"]}')
             elif ai['tracking_type'] == 5:
                 data = ai['deltas']
-                # Need to detach an item from this item.
+                if di['status'] == data['status']:
+                    continue # Already done I guess
+                # Need update the status of this build.
                 response = request(requests.patch, 'dev', f'stock/{di["pk"]}/', json=data)
                 update_field_by_id('stock_stockitem', di['pk'], 'updated', ai['date'])
                 update_field2('stock_stockitemtracking', 'item_id', di['pk'], 'tracking_type', 5, 'date', ai['date'])
