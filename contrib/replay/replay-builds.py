@@ -261,7 +261,7 @@ def buildOutput(build, si, dsSerials, dst):
     update_field2('stock_stockitemtracking', 'item_id', di['pk'], 'tracking_type', 35, 'date', st['date'])
     for t in alloc_items:
         update_field_by_id('stock_stockitem', t, 'updated', st['date'])
-        update_field2('stock_stockitemtracking', 'item_id', t, 'tracking_type', 30, 'date', st['date'])
+        update_fieldN('stock_stockitemtracking', {'item_id': t, 'tracking_type': 30, 'json_extract(deltas, "$.buildorder")': dst["pk"]}, 'date', st['date'])
     return st['date']
 
 # Builds may rely on manually created stock that wasn't input via a purchase order - boo!

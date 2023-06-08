@@ -109,6 +109,23 @@ def update_field2(table, w1field, w1val, w2field, w2val, field, data):
     cur.close()
     db.commit()
 
+def update_fieldN(table, where, field, data):
+    db = sqlite3.connect(os.path.expanduser('~/database.sqlite3'))
+    cur = db.cursor()
+    q = f"UPDATE {table} SET {field} = ? WHERE "
+    w = list()
+    d= [data]
+    for field, value in where.items():
+        w.append(f"{field} = ?")
+        d.append(value)
+    w = " AND ".join(w)
+    print(f"{q} {w}", d)
+    res = cur.execute(f"{q} {w}", d)
+    if res.rowcount <= 0:
+        raise Exception(f"Failed to update {table} {q} {w}: {d}")
+    cur.close()
+    db.commit()
+
 def update_field_like(table, limitfield, like, field, data):
     db = sqlite3.connect(os.path.expanduser('~/database.sqlite3'))
     cur = db.cursor()
