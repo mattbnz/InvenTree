@@ -121,7 +121,6 @@ def update_field_like(table, limitfield, like, field, data):
 def find_ids(table, w1field, w1like, w2field, w2val):
     db = sqlite3.connect(os.path.expanduser('~/database.sqlite3'))
     cur = db.cursor()
-    print(f"SELECT item_id FROM {table} WHERE {w1field} LIKE ? AND {w2field} = ?", (w1like, w2val))
     res = cur.execute(f"SELECT item_id FROM {table} WHERE {w1field} LIKE ? AND {w2field} = ?", (w1like, w2val))
     rv = map(lambda x: x[0], res.fetchall())
     cur.close()

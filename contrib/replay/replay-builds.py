@@ -40,45 +40,10 @@ def create_bo(src_bo):
     update_field_by_id('build_build', response.json()['pk'], 'creation_date', src_bo['creation_date'])
     return response.json()
 
-def create_li(src_li, bo_pk):
-    data = {
-        "order": bo_pk,
-        "part": src_li['part'],
-        "quantity": src_li['quantity'],
-        "purchase_price": src_li['purchase_price'],
-        "purchase_price_currency": src_li['purchase_price_currency'],
-        "destination": src_li['destination'],
-        "target_date": src_li['target_date'],
-    }
-    response = request(requests.post, 'dev', 'order/po-line/', json=data)
-    return response.json()
-
-def create_extrali(src_li, bo_pk):
-    data = {
-        "order": bo_pk,
-        "reference": src_li['reference'],
-        "quantity": src_li['quantity'],
-        "price": src_li['price'],
-    }
-    response = request(requests.post, 'dev', 'order/po-extra-line/', json=data)
-    return response.json()
-
 def find_bo(src_bo, bo_list):
     for bo in bo_list:
         if bo['title'] == src_bo['title'] and bo['part'] == src_bo['part'] and bo['quantity'] == src_bo['quantity']:
             return bo
-    return None
-
-def find_li(src_li, li_list):
-    for li in li_list:
-        if li['part'] == src_li['part'] and li['quantity'] == src_li['quantity']:
-            return li
-    return None
-
-def find_extrali(src_li, li_list):
-    for li in li_list:
-        if li['reference'] == src_li['reference'] and li['quantity'] == src_li['quantity']:
-            return li
     return None
 
 def find_stockitem(src_si, si_list):
@@ -348,50 +313,6 @@ for k in sorted(src_bos.keys()):
         # Now find/update the child stock item that was split out.
         ids = find_ids('stock_stockitemtracking', 'deltas', f'%"buildorder": {dst["pk"]},%', 'tracking_type', 57)
         for t2 in ids:
-            print(t2)
             update_field2('stock_stockitemtracking', 'item_id', t2, 'tracking_type', 57, 'date', last_build)
             update_field2('stock_stockitemtracking', 'item_id', t2, 'tracking_type', 40, 'date', last_build)
             update_field_by_id('stock_stockitem', t2, 'updated', last_build)
-    break
-
-    src_lis = getDict('src', f'order/po-line/?order={k}')
-    dst_lis = getDict('dev', f'order/po-line/?order={dst["pk"]}')
-    received = list()
-    for li in sorted(src_lis.keys()):
-        dstli = find_li(src_lis[li], dst_lis.values())
-        if dstli is None:
-            print(f'LI #{li} is not in dev')
-            dstli = create_li(src_lis[li], dst['pk'])
-        if src_lis[li]['received'] != dstli['received']:
-            i = {
-                'line_item': dstli['pk'],
-                'supplier_part': src_lis[li]['part'],
-                'quantity': src_lis[li]['received'],
-                'status': 10,
-                'location': src_lis[li]['destination'],
-            }
-            if i['supplier_part'] in TRACKABLES:
-                i['batch_code'] = batch_codes[dst['pk']]
-            received.append(i)
-    src_lis = getDict('src', f'order/po-extra-line/?order={k}')
-    dst_lis = getDict('dev', f'order/po-extra-line/?order={dst["pk"]}')
-    for li in sorted(src_lis.keys()):
-        dstli = find_extrali(src_lis[li], dst_lis.values())
-        if dstli is None:
-            print(f'Extra LI #{li} is not in dev')
-            create_extrali(src_lis[li], dst['pk'])
-    if dst['status_text'] == 'Pending':
-        response = request(requests.post, 'dev', f'order/po/{dst["pk"]}/issue/')
-        update_field_by_id('order_purchaseorder', dst['pk'], 'issue_date', src_bos[k]['issue_date'])
-    if len(received) > 0:
-        loc = received[0]['location']
-        if loc is None:
-            loc = 2
-        data = {
-            'items': received,
-            'location': loc
-        }
-        response = request(requests.post, 'dev', f'order/po/{dst["pk"]}/receive/', json=data)
-        update_field_by_id('order_purchaseorder', dst['pk'], 'complete_date', src_bos[k]['complete_date'])
-    update_field('stock_stockitem', 'purchase_order_id', dst['pk'], 'updated', f"{src_bos[k]['complete_date']} 12:20:30.0")
-    update_field_like('stock_stockitemtracking', 'deltas', f'%"purchaseorder": {dst["pk"]},%', 'date', f"{src_bos[k]['complete_date']} 12:20:30.0")
