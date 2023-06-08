@@ -20,6 +20,9 @@ import requests
 
 from common import *
 
+# This script didn't exist before this date, and no data being migrated was created after this date
+# so we can use any events after this date as a signal that the timestamp needs updating.
+OUR_EPOCH = "2023-06-01"
 
 def create_bo(src_bo):
     data = {
@@ -229,7 +232,9 @@ def buildOutput(build, si, dsSerials, dst):
         sys.exit(1)
     logging.info(f'   - matched to {di["pk"]} with serial {di["serial"]}')
     update_field_by_id('stock_stockitem', di['pk'], 'updated', st['date'])
-    update_field2('stock_stockitemtracking', 'item_id', di['pk'], 'tracking_type', 50, 'date', st['date'])
+    update_fieldN('stock_stockitemtracking',
+                  {'item_id': di['pk'], 'tracking_type': 50, 'json_extract(deltas, "$.buildorder")': dst["pk"]},
+                'date', st['date'])
     if si['is_building'] == di['is_building']:
         logging.info(f'   - with matching build state{di["is_building"]}')
         return
@@ -279,11 +284,17 @@ def buildOutput(build, si, dsSerials, dst):
     }
     response = request(requests.post, 'dev', f'build/{dst["pk"]}/complete/', json=data)
     update_field_by_id('stock_stockitem', di['pk'], 'updated', st['date'])
-    update_field2('stock_stockitemtracking', 'item_id', di['pk'], 'tracking_type', 55, 'date', st['date'])
-    update_field2('stock_stockitemtracking', 'item_id', di['pk'], 'tracking_type', 35, 'date', st['date'])
+    update_fieldN('stock_stockitemtracking',
+                  {'item_id': di['pk'], 'tracking_type': 55, 'json_extract(deltas, "$.buildorder")': dst["pk"]},
+                  'date', st['date'])
+    update_fieldN('stock_stockitemtracking',
+                  {'item_id': di['pk'], 'tracking_type': 35, 'date+': '2023-06-01'},
+                   'date', st['date'])
     for t in alloc_items:
         update_field_by_id('stock_stockitem', t, 'updated', st['date'])
-        update_fieldN('stock_stockitemtracking', {'item_id': t, 'tracking_type': 30, 'json_extract(deltas, "$.buildorder")': dst["pk"]}, 'date', st['date'])
+        update_fieldN('stock_stockitemtracking',
+                      {'item_id': t, 'tracking_type': 30, 'json_extract(deltas, "$.buildorder")': dst["pk"]},
+                      'date', st['date'])
     return st['date']
 
 # Builds may rely on manually created stock that wasn't input via a purchase order - boo!
@@ -336,12 +347,20 @@ for k in sorted(src_bos.keys()):
         for t in stock_ids:
             # Update the original stock item
             update_field_by_id('stock_stockitem', t, 'updated', last_build)
-            update_field2('stock_stockitemtracking', 'item_id', t, 'tracking_type', 42, 'date', last_build)
+            try:
+                update_fieldN('stock_stockitemtracking', {'item_id': t, 'tracking_type': 42, 'date+': OUR_EPOCH}, 'date', last_build)
+            except:
+                # OK for this not to exist, if the item was fully consumed, only 57 will be created
+                pass
         # Now find/update the child stock item that was split out.
         ids = find_ids('stock_stockitemtracking', 'deltas', f'%"buildorder": {dst["pk"]},%', 'tracking_type', 57)
         for t2 in ids:
-            update_field2('stock_stockitemtracking', 'item_id', t2, 'tracking_type', 57, 'date', last_build)
-            update_field2('stock_stockitemtracking', 'item_id', t2, 'tracking_type', 40, 'date', last_build)
+            update_fieldN('stock_stockitemtracking', {'item_id': t2, 'tracking_type': 57, 'date+': OUR_EPOCH}, 'date', last_build)
+            try:
+                update_fieldN('stock_stockitemtracking', {'item_id': t2, 'tracking_type': 40, 'date+': OUR_EPOCH}, 'date', last_build)
+            except:
+                # OK for this not to exist, if the item was fully consumed, only 57 will be created
+                pass
             update_field_by_id('stock_stockitem', t2, 'updated', last_build)
         # Update stock list with new stokc
         dst_stock = getDict('dev', 'stock/')
@@ -362,8 +381,8 @@ for k in sorted(src_bos.keys()):
                 }
                 response = request(requests.post, 'dev', f'stock/{ri["pk"]}/uninstall/', json=data)
                 update_field_by_id('stock_stockitem', ri['pk'], 'updated', ai['date'])
-                update_field2('stock_stockitemtracking', 'item_id', di['pk'], 'tracking_type', 36, 'date', ai['date'])
-                update_field2('stock_stockitemtracking', 'item_id', ri['pk'], 'tracking_type', 31, 'date', ai['date'])
+                update_fieldN('stock_stockitemtracking', {'item_id': di['pk'], 'tracking_type': 36, 'date+': OUR_EPOCH}, 'date', ai['date'])
+                update_fieldN('stock_stockitemtracking', {'item_id': ri['pk'], 'tracking_type': 31, 'date+': OUR_EPOCH}, 'date', ai['date'])
                 logging.info(f'  - Removed {ri["pk"]} from {di["pk"]} on {ai["date"]}: {ai["notes"]}')
             elif ai['tracking_type'] == 5:
                 data = ai['deltas']
@@ -372,5 +391,5 @@ for k in sorted(src_bos.keys()):
                 # Need update the status of this build.
                 response = request(requests.patch, 'dev', f'stock/{di["pk"]}/', json=data)
                 update_field_by_id('stock_stockitem', di['pk'], 'updated', ai['date'])
-                update_field2('stock_stockitemtracking', 'item_id', di['pk'], 'tracking_type', 5, 'date', ai['date'])
+                update_fieldN('stock_stockitemtracking', {'item_id': di['pk'], 'tracking_type': 5, 'date+': OUR_EPOCH}, 'date', ai['date'])
                 logging.info(f'  - Updated {di["pk"]} status to {data} on {ai["date"]}: {ai["notes"]}')

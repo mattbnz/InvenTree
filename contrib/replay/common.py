@@ -117,7 +117,11 @@ def update_fieldN(table, where, field, data):
     w = list()
     d= [data]
     for field, value in where.items():
-        w.append(f"{field} = ?")
+        if field[-1] == "+":
+            field = field[:-1]
+            w.append(f"{field} > ?")
+        else:
+            w.append(f"{field} = ?")
         d.append(value)
     w = " AND ".join(w)
     res = cur.execute(f"{q} {w}", d)
