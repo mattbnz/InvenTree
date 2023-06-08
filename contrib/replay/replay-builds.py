@@ -144,7 +144,7 @@ def findSIviaST(build, part, st_list):
 
 
 def allocateStock(dst):
-    #aP = getDict('dev', f'build/item/?build={dst["pk"]}')
+    aP = getDict('dev', f'build/item/?build={dst["pk"]}')
     bS = getDict('dev', f'stock/?build={dst["pk"]}')
     items = list()
     ids = list()
@@ -152,13 +152,13 @@ def allocateStock(dst):
         if parts[bI['sub_part']]['trackable']:
             continue
         # Look for assigned stock
-        #bi = findBI(bI['sub_part'], aP.values())
+        bi = findBI(bI['sub_part'], aP.values())
         si = findBS(bI['sub_part'], bS.values())
-        #if bi:
-        #    logging.info(f' - {bI["sub_part"]} x {bi["quantity"]} is assigned via bi #{bi["pk"]}')
-        #    continue
-        #elif si:
-        if si:
+        if bi:
+            logging.info(f' - {bI["sub_part"]} x {bi["quantity"]} is assigned via bi #{bi["pk"]}')
+            continue
+        elif si:
+        #if si:
             logging.info(f' - {bI["sub_part"]} x {si["quantity"]} used via si #{si["pk"]}')
             ids.append(si["pk"])
             continue
@@ -248,9 +248,19 @@ def buildOutput(build, si, dsSerials, dst):
         if not dsi:
             logging.critical(f'Could not find matching allocation for {aid["part"]} with serial {aid["serial"]}')
             sys.exit(1)
+        bom_item = None
+        if aid['part'] in tracked_parts:
+            bom_item = tracked_parts[aid['part']]
+        else:
+            # See if we have a variant in the bom
+            if parts[aid['part']]['variant_of'] in tracked_parts and parts[aid['part']]['variant_of'] in tracked_parts:
+                bom_item = tracked_parts[parts[aid['part']]['variant_of']]
+        if not bom_item:
+            logging.critical(f'allocated part in src {aid["part"]} dopes not appear to be tracked in dst: {tracked_parts}')
+            sys.exit(1)
         data = {
             'items': [{
-                'bom_item': tracked_parts[aid['part']],
+                'bom_item': bom_item,
                 'stock_item': dsi['pk'],
                 'quantity': 1,
                 'output': di['pk'],
@@ -310,9 +320,8 @@ for k in sorted(src_bos.keys()):
         dsSerials = createBuildOutputs(k, built_stock, dst)
         for si in built_stock:
             t = buildOutput(k, si, dsSerials, dst)
-            if t > last_build:
+            if t and t > last_build:
                 last_build = t
-                print(last_build, t)
     # Complete the build
     if src_bos[k]['status'] == 40 and dst['status'] != 40:
         response = request(requests.post, 'dev', f'build/{dst["pk"]}/finish/', json={})
