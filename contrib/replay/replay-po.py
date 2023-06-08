@@ -30,7 +30,7 @@ def create_po(src_po):
     if src_po['responsible_detail'] is not None:
         data["responsible"] = getOwner(src_po['responsible_detail']['owner_id'], src_po['responsible_detail']['label'])
     response = request(requests.post, 'dev', 'order/po/', json=data)
-    fix_date('order_purchaseorder', response.json()['pk'], 'creation_date', src_po['creation_date'])
+    update_field_by_id('order_purchaseorder', response.json()['pk'], 'creation_date', src_po['creation_date'])
     return response.json()
 
 def create_li(src_li, po_pk):
@@ -130,7 +130,7 @@ for k in sorted(src_pos.keys()):
             create_extrali(src_lis[li], dst['pk'])
     if dst['status_text'] == 'Pending':
         response = request(requests.post, 'dev', f'order/po/{dst["pk"]}/issue/')
-        fix_date('order_purchaseorder', dst['pk'], 'issue_date', src_pos[k]['issue_date'])
+        update_field_by_id('order_purchaseorder', dst['pk'], 'issue_date', src_pos[k]['issue_date'])
     if len(received) > 0:
         loc = received[0]['location']
         if loc is None:
@@ -140,6 +140,6 @@ for k in sorted(src_pos.keys()):
             'location': loc
         }
         response = request(requests.post, 'dev', f'order/po/{dst["pk"]}/receive/', json=data)
-        fix_date('order_purchaseorder', dst['pk'], 'complete_date', src_pos[k]['complete_date'])
-    fix_dates('stock_stockitem', 'purchase_order_id', dst['pk'], 'updated', f"{src_pos[k]['complete_date']} 12:20:30.0")
-    fix_dateslike('stock_stockitemtracking', 'deltas', f'%"purchaseorder": {dst["pk"]},%', 'date', f"{src_pos[k]['complete_date']} 12:20:30.0")
+        update_field_by_id('order_purchaseorder', dst['pk'], 'complete_date', src_pos[k]['complete_date'])
+    update_field('stock_stockitem', 'purchase_order_id', dst['pk'], 'updated', f"{src_pos[k]['complete_date']} 12:20:30.0")
+    update_field_like('stock_stockitemtracking', 'deltas', f'%"purchaseorder": {dst["pk"]},%', 'date', f"{src_pos[k]['complete_date']} 12:20:30.0")

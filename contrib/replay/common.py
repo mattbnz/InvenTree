@@ -9,11 +9,15 @@
 #print(pos)
 
 import json
+import logging
 import os
 import os.path
+import pickle
 import sqlite3
 
 import requests
+
+logging.basicConfig(format='%(asctime)s %(levelname)s %(message)s', level=logging.INFO)
 
 WHO = {
     'src': {
@@ -59,13 +63,26 @@ def getDict(which, url):
         rv[t['pk']] = t
     return rv
 
+try:
+    _CACHE = pickle.load(open('/tmp/replay-cache.pickle', 'rb'))
+except FileNotFoundError:
+    _CACHE = {}
+
+def cacheDict(which, url):
+    if (which, url) in _CACHE:
+        return _CACHE[(which, url)]
+    rv = getDict(which, url)
+    _CACHE[(which, url)] = rv
+    pickle.dump(_CACHE, open('/tmp/replay-cache.pickle', 'wb'))
+    return rv
+
 def getOwner(owner_id, label):
     for owner in owners.values():
         if owner['label'] == label and owner['owner_id'] == owner_id:
             return owner['pk']
     return None
 
-def fix_date(table, pk, field, data):
+def update_field_by_id(table, pk, field, data):
     db = sqlite3.connect(os.path.expanduser('~/database.sqlite3'))
     cur = db.cursor()
     res = cur.execute(f"UPDATE {table} SET {field} = ? WHERE id = ?", (data, pk))
@@ -74,16 +91,25 @@ def fix_date(table, pk, field, data):
     cur.close()
     db.commit()
 
-def fix_dates(table, limitfield, pk, field, data):
+def update_field(table, w1field, w1val, field, data):
     db = sqlite3.connect(os.path.expanduser('~/database.sqlite3'))
     cur = db.cursor()
-    res = cur.execute(f"UPDATE {table} SET {field} = ? WHERE {limitfield} = ?", (data, pk))
+    res = cur.execute(f"UPDATE {table} SET {field} = ? WHERE {w1field} = ?", (data, w1val))
     if res.rowcount <= 0:
-        raise Exception(f"Failed to update {table} {limitfield}={pk} {field} to {data}")
+        raise Exception(f"Failed to update {table} {w1field}={w1val} {field} to {data}")
     cur.close()
     db.commit()
 
-def fix_dateslike(table, limitfield, like, field, data):
+def update_field2(table, w1field, w1val, w2field, w2val, field, data):
+    db = sqlite3.connect(os.path.expanduser('~/database.sqlite3'))
+    cur = db.cursor()
+    res = cur.execute(f"UPDATE {table} SET {field} = ? WHERE {w1field} = ? AND {w2field} = ?", (data, w1val, w2val))
+    if res.rowcount <= 0:
+        raise Exception(f"Failed to update {table} {w1field}={w1val} AND {w2field}={w2val} {field} to {data}")
+    cur.close()
+    db.commit()
+
+def update_field_like(table, limitfield, like, field, data):
     db = sqlite3.connect(os.path.expanduser('~/database.sqlite3'))
     cur = db.cursor()
     res = cur.execute(f"UPDATE {table} SET {field} = ? WHERE {limitfield} LIKE ?", (data, like))
@@ -91,5 +117,14 @@ def fix_dateslike(table, limitfield, like, field, data):
         raise Exception(f"Failed to update {table} {limitfield} like {like} {field} to {data}")
     cur.close()
     db.commit()
+
+def find_ids(table, w1field, w1like, w2field, w2val):
+    db = sqlite3.connect(os.path.expanduser('~/database.sqlite3'))
+    cur = db.cursor()
+    print(f"SELECT item_id FROM {table} WHERE {w1field} LIKE ? AND {w2field} = ?", (w1like, w2val))
+    res = cur.execute(f"SELECT item_id FROM {table} WHERE {w1field} LIKE ? AND {w2field} = ?", (w1like, w2val))
+    rv = map(lambda x: x[0], res.fetchall())
+    cur.close()
+    return rv
 
 owners = getDict('dev', 'user/owner/')
