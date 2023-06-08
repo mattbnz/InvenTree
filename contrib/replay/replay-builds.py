@@ -45,7 +45,7 @@ def create_bo(src_bo):
 
 def find_bo(src_bo, bo_list):
     for bo in bo_list:
-        if bo['title'] == src_bo['title'] and bo['part'] == src_bo['part'] and bo['quantity'] == src_bo['quantity']:
+        if bo['title'] == src_bo['title'].replace("&amp;", "&") and bo['part'] == src_bo['part'] and bo['quantity'] == src_bo['quantity']:
             return bo
     return None
 
@@ -101,7 +101,7 @@ def createManualStock():
             if q['tracking_type'] != 1:
                 continue
             if q['deltas']['status'] == 10:
-                dsi = find_stockitem(t, dst_stock.values())
+                dsi = find_stockitem(t, getDict('dev', 'stock/').values())
                 if dsi:
                     print(f'Stock item #{t["pk"]} is already in dev as #{dsi["pk"]}')
                 else:
@@ -138,20 +138,15 @@ def findBS(part, bs_list):
     return None
 
 def findSIviaST(build, part, st_list):
+    rv = dict()
     # We have some missing data for SSD in the original DB, so fake up our best guess...
     if build == 1 and part == 20:
         return {
-            -1: ({'purchase_order': 8}, 3)
+            -1: ({'purchase_order': 9}, 3)
         }
-    elif build == 2 and part == 20:
-        return {
-            -1: ({'purchase_order': 4}, 1)
-        }
-    elif build == 3 and part == 20:
-        return {
-            -1: ({'purchase_order': 4}, 1)
-        }
-    rv = dict()
+    elif build == 13 and part == 20:
+        rv[-1] = ({'purchase_order': 8}, 5)
+
     for st in st_list:
         if 'buildorder' in st['deltas'] and st['deltas']['buildorder'] == build:
             si = src_stock[st['item']]
@@ -161,7 +156,7 @@ def findSIviaST(build, part, st_list):
     return rv
 
 
-def allocateStock(dst):
+def allocateStock(build, dst):
     aP = getDict('dev', f'build/item/?build={dst["pk"]}')
     bS = getDict('dev', f'stock/?build={dst["pk"]}')
     items = list()
@@ -182,14 +177,14 @@ def allocateStock(dst):
             continue
         else:
             logging.info(f' - needs part {bI["sub_part"]} x {bI["quantity"]} x {dst["quantity"]}')
-            oSi = findSIviaST(dst['pk'], bI['sub_part'], sT.values())
+            oSi = findSIviaST(build, bI['sub_part'], sT.values())
             if len(oSi) == 0:
-                logging.critical(f' ! ERROR - could not find tracking entry for {bI["sub_part"]} in build #{dst["pk"]}')
+                logging.critical(f' ! ERROR - could not find tracking entry for {bI["sub_part"]} in build #{build}')
                 sys.exit(1)
             found = 0
             for oSiPK, v in oSi.items():
                 logging.info(f'   + src used stock item {oSiPK} from PO#{v[0]["purchase_order"]} x {v[1]}')
-                si = find_stockitem_part_po(bI['sub_part'], v[0]['purchase_order'], dst_stock.values())
+                si = find_stockitem_part_po(bI['sub_part'], v[0]['purchase_order'], getDict('dev', 'stock/').values())
                 if not si:
                     logging.critical(f' ! ERROR - no matching stock item!')
                     sys.exit(1)
@@ -208,11 +203,11 @@ def allocateStock(dst):
         data = {
             'items': items,
         }
-        response = request(requests.post, 'dev', f'build/{k}/allocate/', json=data)
+        response = request(requests.post, 'dev', f'build/{dst["pk"]}/allocate/', json=data)
     return ids
 
 def createBuildOutputs(build, built_stock, dst):
-    dest_stock = find_buildstock(dst["pk"], dst_stock.values())
+    dest_stock = find_buildstock(dst["pk"], getDict('dev', 'stock/').values())
     need_serial = []
     for bs in built_stock:
         found = False
@@ -266,6 +261,7 @@ def buildOutput(build, si, dsSerials, dst):
         if parts[bI['sub_part']]['trackable']:
             tracked_parts[bI['sub_part']] = bI['pk']
     # Match allocations
+    dst_stock = getDict('dev', 'stock/')
     alloc_items = list()
     for ai in list(filter(lambda x: x['item'] == si['pk'] and x['tracking_type'] == 35, sT.values())):
         aid = ai['deltas']['stockitem_detail']
@@ -317,53 +313,41 @@ def buildOutput(build, si, dsSerials, dst):
                       'date', st['date'])
     return st['date']
 
-# Builds may rely on manually created stock that wasn't input via a purchase order - boo!
-logging.info("Creating manual stock items")
-dst_stock = getDict('dev', 'stock/')
-src_stock = cacheDict('src', 'stock/')
-
-createManualStock()
-logging.info("Refreshing destination stock")
-dst_stock = getDict('dev', 'stock/')
-
-logging.info("Caching src stock tracking info")
-sT = cacheDict('src', f'stock/track/')
-logging.info("Caching destination part info")
-parts = getDict('dev', 'part/')
-logging.info("Loading src build orders")
-src_bos = cacheDict('src', 'build/')
-logging.info("Loading dest build orders")
-dst_bos = getDict('dev', 'build/')
-
-logging.info("Processing build orders")
-last_build = ""
-for k in sorted(src_bos.keys()):
-    dst = find_bo(src_bos[k], dst_bos.values())
+def processBuild(build):
+    dst = find_bo(src_bos[build], getDict('dev', 'build/').values())
     if dst is None:
-        logging.info(f'Build #{k} is not in dev')
-        dst = create_bo(src_bos[k])
-    logging.info(f'Build #{k} is #{dst["pk"]}')
-    if src_bos[k]['status'] == 30:
+        logging.info(f'Build #{build} is not in dev')
+        dst = create_bo(src_bos[build])
+    logging.info(f'Build #{build} is #{dst["pk"]}')
+    if src_bos[build]['status'] == 30:
         if dst['status'] != 30:
             data = {'remove_allocated_stock': False, 'remove_incomplete_outputs': False}
             response = request(requests.post, 'dev', f'build/{dst["pk"]}/cancel/', json=data)
             logging.info(f'  - Marked {dst["pk"]} as cancelled')
-        continue
+        return
+
+    # If build has children, process them before proceeding as they may be needed for allocation
+    children = filter(lambda x: x['parent'] == build, src_bos.values())
+    for child in children:
+        logging.info(f'Processing child build #{child["pk"]} before parent #{build}')
+        processBuild(child['pk'])
+
     # Allocate untracked stock if we're not completed
+    last_build = None
     stock_ids = list()
     if dst['completed'] < dst['quantity']:
-        stock_ids = allocateStock(dst)
-        built_stock = find_buildstock(k, src_stock.values())
-        dsSerials = createBuildOutputs(k, built_stock, dst)
+        stock_ids = allocateStock(build, dst)
+        built_stock = find_buildstock(build, src_stock.values())
+        dsSerials = createBuildOutputs(build, built_stock, dst)
         for si in built_stock:
-            t = buildOutput(k, si, dsSerials, dst)
-            if t and t > last_build:
+            t = buildOutput(build, si, dsSerials, dst)
+            if (not last_build and t) or (t and t > last_build):
                 last_build = t
     # Complete the build
-    if src_bos[k]['status'] == 40 and dst['status'] != 40:
+    if src_bos[build]['status'] == 40 and dst['status'] != 40:
         response = request(requests.post, 'dev', f'build/{dst["pk"]}/finish/', json={})
         logging.info(f' Build #{dst["pk"]} is completed!')
-        update_field_by_id('build_build', dst['pk'], 'completion_date', src_bos[k]['completion_date'])
+        update_field_by_id('build_build', dst['pk'], 'completion_date', src_bos[build]['completion_date'])
         for t in stock_ids:
             # Update the original stock item
             update_field_by_id('stock_stockitem', t, 'updated', last_build)
@@ -382,9 +366,8 @@ for k in sorted(src_bos.keys()):
                 # OK for this not to exist, if the item was fully consumed, only 57 will be created
                 pass
             update_field_by_id('stock_stockitem', t2, 'updated', last_build)
-        # Update stock list with new stokc
-        dst_stock = getDict('dev', 'stock/')
     # Before moving on, check if any of the resulting stock items have further events that need to be processed
+    dst_stock = getDict('dev', 'stock/')
     for item in find_buildstock(k, src_stock.values()):
         for ai in list(filter(lambda x: x['item'] == item['pk'] and x['tracking_type'] in(36, 5), sT.values())):
             serial = item['serial']
@@ -413,3 +396,20 @@ for k in sorted(src_bos.keys()):
                 update_field_by_id('stock_stockitem', di['pk'], 'updated', ai['date'])
                 update_fieldN('stock_stockitemtracking', {'item_id': di['pk'], 'tracking_type': 5, 'date+': OUR_EPOCH}, 'date', ai['date'])
                 logging.info(f'  - Updated {di["pk"]} status to {data} on {ai["date"]}: {ai["notes"]}')
+
+# Builds may rely on manually created stock that wasn't input via a purchase order - boo!
+logging.info("Creating manual stock items")
+src_stock = cacheDict('src', 'stock/')
+createManualStock()
+
+logging.info("Caching src stock tracking info")
+sT = cacheDict('src', f'stock/track/')
+logging.info("Caching destination part info")
+parts = getDict('dev', 'part/')
+logging.info("Loading src build orders")
+src_bos = cacheDict('src', 'build/')
+
+logging.info("Processing build orders")
+last_build = ""
+for k in sorted(src_bos.keys()):
+   processBuild(k)
