@@ -34,11 +34,14 @@ def create_po(src_po):
     return response.json()
 
 def create_li(src_li, po_pk):
+    pp = 0.0001  # Default to 0.001 if part was free (BoM costs require price)
+    if src_li['purchase_price'] != '0.0000':
+        pp = src_li['purchase_price']
     data = {
         "order": po_pk,
         "part": src_li['part'],
         "quantity": src_li['quantity'],
-        "purchase_price": src_li['purchase_price'],
+        "purchase_price": pp,
         "purchase_price_currency": src_li['purchase_price_currency'],
         "destination": src_li['destination'],
         "target_date": src_li['target_date'],
