@@ -874,12 +874,15 @@ class Build(MPTTModel, InvenTree.models.InvenTreeBarcodeMixin, InvenTree.models.
         # Calculate the purchase price, from the sum of BOM item purchase prices.
         untracked_items = self.allocated_stock.filter(stock_item__part__trackable=False)
         if untracked_items.filter(stock_item__purchase_price__isnull=True).count() != 0:
-            raise RuntimeError(f'Cannot complete build with unpriced stock items!')
+            raise RuntimeError('Cannot complete build with unpriced stock items!')
 
         # Build lookup of bom quantities
         q = {}
         for i in self.untracked_bom_items:
             q[i.sub_part.pk] = i.quantity
+            # including descendants, in case the BoM item is a template/variant part.
+            for i2 in i.sub_part.get_descendants(include_self=False):
+                q[i2.pk] = i.quantity
 
         purchase_price = 0.0
         qs = untracked_items.values('stock_item__part__pk', 'stock_item__part__name')
