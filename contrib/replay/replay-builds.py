@@ -69,11 +69,18 @@ def find_stockitem_in(part, parent, si_list):
             return si
     return None
 
+def partIs(part, want):
+    while part != None:
+        if part == want:
+            return True
+        part = parts[part]['variant_of']
+    return False
+
 def find_stockitem_part_po(part, po, si_list):
     for si in si_list:
         if si['consumed_by']:
             continue
-        if si['part'] == part and si['purchase_order'] == po:
+        if partIs(si['part'], part) and si['purchase_order'] == po:
             return si
     return None
 
@@ -85,7 +92,7 @@ def find_stockitem_part_po_serial(part, po, serial, si_list):
     elif serial == "KPB":
         serial = "KPB0"
     for si in si_list:
-        if si['part'] == part and si['purchase_order'] == po:
+        if partIs(si['part'], part) and si['purchase_order'] == po:
             if si['serial'] == serial or si['serial'].replace("-", "") == serial:
                 return si
     return None
@@ -127,31 +134,94 @@ def getBom(part):
 
 def findBI(part, bi_list):
     for bi in bi_list:
-        if bi['part'] == part:
+        if partIs(bi['part'], part):
             return bi
     return None
 
 def findBS(part, bs_list):
     for bs in bs_list:
-        if bs['part'] == part:
+        if partIs(bs['part'], part):
             return bs
     return None
 
 def findSIviaST(build, part, st_list):
     rv = dict()
     # We have some missing data for SSD in the original DB, so fake up our best guess...
+    # This is because these were built before our interim tracking solution landed.
     if build == 1 and part == 20:
         return {
-            -1: ({'purchase_order': 9}, 3)
+            -1: ({'purchase_order': 9}, -1)
         }
     elif build == 13 and part == 20:
         rv[-1] = ({'purchase_order': 8}, 5)
+    # And some missing data for the BoMs which we are fixing on replay
+    # no ST in src, because the bom items were missing!
+    elif part == 28:
+        return {-1: ({'purchase_order': 15}, -1)}
+    elif build in (7,8) and part == 41:  # Prototype covers
+        return {-1: ({'purchase_order': 21}, -1)}
+    elif build == 9 and part == 34:  # Prototype cases
+        return {-1: ({'purchase_order': 19}, -1)}  # tentative, guessed...
+    elif build == 11 and part == 34:  # Cases
+        return {-1: ({'part': 55, 'purchase_order': 25}, -1)}  # co2mon.nz white cases
+    elif build == 12 and part == 34:  # Cases
+        return {
+            -1: ({'part': 56, 'purchase_order': 25}, 1),  # co2mon.nz black case
+            -2: ({'part': 55, 'purchase_order': 25}, 2),  # co2mon.nz white cases
+            -3: ({'part': 55, 'purchase_order': 31}, 5),  # co2mon.nz white cases
+        }
+    elif build == 14 and part == 34:  # Cases
+        return {-1: ({'part': 55, 'purchase_order': 31}, -1)}  # co2mon.nz white cases
+    elif build in (10,11, 12, 14) and part == 40:  # Covers
+        return {-1: ({'purchase_order': 20}, -1)}  # fiasco 8mm covers
+    elif build == 10 and part == 34:
+        return {
+            38: (src_stock[38], 1),  # tentative, guessed...
+            39: (src_stock[39], 2),  # tentative, guessed...
+            58: (src_stock[58], 3),  # tentative, guessed...
+            }
+    # And other parts which we turned into variants, so it can't find them easily
+    elif part == 69: # Case Screw
+        # Need to be specific about which build used which PO :(
+        if build == 10:
+            return {
+                -1: ({'part': 32, 'purchase_order': 17}, 12),  # Part 32, now variant of part 69
+                -2: ({'part': 32, 'purchase_order': 18}, 12)
+            }
+        elif build == 11:
+            return {
+                -1: ({'part': 32, 'purchase_order': 18}, 44),  # Part 32, now variant of part 69
+            }
+        elif build == 12:
+            return {
+                -1: ({'part': 32, 'purchase_order': 18}, 4),  # Part 32, now variant of part 69
+                -2: ({'part': 32, 'purchase_order': 33}, 28),  # Part 32, now variant of part 69
+            }
+        elif build == 14:
+            return {
+                -1: ({'part': 32, 'purchase_order': 33}, 12),  # Part 32, now variant of part 69
+            }
+    elif build in (10,) and part == 70: # Case-Spacer
+        return {-1: ({'part': 66, 'purchase_order': 14}, -1)}  # Part 66, now variant of part 67 & 70
+    elif build in (11,14) and part == 70: # SPACER
+        return {55: ({'part': 66, 'purchase_order': 14}, -1)}  # Part 66 (white spacer), now variant of part 67, variant of 70.
+    elif build in (12,) and part == 70: # Case-Spacer
+        return {
+            -1: ({'part': 10, 'purchase_order': 1}, 4),    # Part 10 (black spacer), now variant of part 67 & 70
+            -2: ({'part': 66, 'purchase_order': 14}, 28),  # Part 66 (white spacer), now variant of part 67 & 70
+        }
 
     for st in st_list:
         if 'buildorder' in st['deltas'] and st['deltas']['buildorder'] == build:
             si = src_stock[st['item']]
             if si['part'] == part:
                 rv[si['pk']] = (si, st['deltas']['removed'])
+
+    # BoM for part 59 had bad quantity for M3x30 (part 32), so let logic override the quantity
+    # rather than what was used in src.
+    if build == 9 and part == 32:
+        for k, v in rv.items():
+            rv[k] = (v[0], -1)
 
     return rv
 
@@ -179,12 +249,18 @@ def allocateStock(build, dst):
             logging.info(f' - needs part {bI["sub_part"]} x {bI["quantity"]} x {dst["quantity"]}')
             oSi = findSIviaST(build, bI['sub_part'], sT.values())
             if len(oSi) == 0:
-                logging.critical(f' ! ERROR - could not find tracking entry for {bI["sub_part"]} in build #{build}')
+                logging.critical(f' ! ERROR - could not find tracking entry for part {bI["sub_part"]} in build #{build}')
                 sys.exit(1)
             found = 0
             for oSiPK, v in oSi.items():
-                logging.info(f'   + src used stock item {oSiPK} from PO#{v[0]["purchase_order"]} x {v[1]}')
-                si = find_stockitem_part_po(bI['sub_part'], v[0]['purchase_order'], getDict('dev', 'stock/').values())
+                q = v[1]
+                if q == -1:
+                    q = bI['quantity'] * dst['quantity']
+                ptype = bI['sub_part']
+                if 'part' in v[0]:
+                    ptype = v[0]["part"]
+                logging.info(f'   + src used stock item {oSiPK} of type {ptype} from PO#{v[0]["purchase_order"]} x {q}')
+                si = find_stockitem_part_po(ptype, v[0]['purchase_order'], getDict('dev', 'stock/').values())
                 if not si:
                     logging.critical(f' ! ERROR - no matching stock item!')
                     sys.exit(1)
@@ -193,9 +269,9 @@ def allocateStock(build, dst):
                 items.append({
                         'bom_item': bI['pk'],
                         'stock_item': si['pk'],
-                        'quantity': v[1],
+                        'quantity': q,
                     })
-                found += v[1]
+                found += q
             if found != bI['quantity'] * dst['quantity']:
                 logging.critical(f' ! ERROR - only found {found} stock for part {bI["sub_part"]} needed {bI["quantity"]} x {dst["quantity"]}')
                 sys.exit(1)
@@ -203,6 +279,7 @@ def allocateStock(build, dst):
         data = {
             'items': items,
         }
+        print(data)
         response = request(requests.post, 'dev', f'build/{dst["pk"]}/allocate/', json=data)
     return ids
 
@@ -262,9 +339,15 @@ def buildOutput(build, si, dsSerials, dst):
             tracked_parts[bI['sub_part']] = bI['pk']
     # Match allocations
     dst_stock = getDict('dev', 'stock/')
+    aP = getDict('dev', f'build/item/?build={dst["pk"]}')
     alloc_items = list()
     for ai in list(filter(lambda x: x['item'] == si['pk'] and x['tracking_type'] == 35, sT.values())):
         aid = ai['deltas']['stockitem_detail']
+        # Look for already assigned stock
+        bi = findBI(aid['part'], aP.values())
+        if bi:
+            logging.info(f' - {aid["part"]} x {bi["quantity"]} is assigned via bi #{bi["pk"]}')
+            continue
         dsi = find_stockitem_part_po_serial(aid['part'], aid['purchase_order'], aid['serial'], dst_stock.values())
         if not dsi:
             logging.critical(f'Could not find matching allocation for {aid["part"]} with serial {aid["serial"]}')
@@ -274,7 +357,7 @@ def buildOutput(build, si, dsSerials, dst):
             bom_item = tracked_parts[aid['part']]
         else:
             # See if we have a variant in the bom
-            if parts[aid['part']]['variant_of'] in tracked_parts and parts[aid['part']]['variant_of'] in tracked_parts:
+            if parts[aid['part']]['variant_of'] in tracked_parts:
                 bom_item = tracked_parts[parts[aid['part']]['variant_of']]
         if not bom_item:
             logging.critical(f'allocated part in src {aid["part"]} dopes not appear to be tracked in dst: {tracked_parts}')
@@ -412,4 +495,4 @@ src_bos = cacheDict('src', 'build/')
 logging.info("Processing build orders")
 last_build = ""
 for k in sorted(src_bos.keys()):
-   processBuild(k)
+    processBuild(k)
