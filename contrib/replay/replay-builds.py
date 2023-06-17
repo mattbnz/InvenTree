@@ -176,17 +176,23 @@ def findSIviaST(build, part, st_list):
         return {-1: ({'purchase_order': 20}, -1)}  # fiasco 8mm covers
     elif build == 10 and part == 34:
         return {
-            38: (src_stock[38], 1),  # tentative, guessed...
-            39: (src_stock[39], 2),  # tentative, guessed...
-            58: (src_stock[58], 3),  # tentative, guessed...
+            37: (src_stock[37], 1),  # 10mm, tentative, guessed...
+            38: (src_stock[38], 1),  # 15mm, tentative, guessed...
+            39: (src_stock[39], 2),  # proto, tentative, guessed...
+            58: (src_stock[58], 2),  # black, tentative, guessed...
             }
     # And other parts which we turned into variants, so it can't find them easily
     elif part == 69: # Case Screw
         # Need to be specific about which build used which PO :(
-        if build == 10:
+        if build == 9:
             return {
-                -1: ({'part': 32, 'purchase_order': 17}, 12),  # Part 32, now variant of part 69
-                -2: ({'part': 32, 'purchase_order': 18}, 12)
+                -1: ({'part': 31, 'purchase_order': 17}, -1),  # Part 31, now variant of part 69
+            }
+        elif build == 10:
+            return {
+                -1: ({'part': 31, 'purchase_order': 18}, 16),  # Part 31, now variant of part 69
+                -2: ({'part': 32, 'purchase_order': 18}, 4),
+                -3: ({'part': 31, 'purchase_order': 17}, 4),  # Part 31, now variant of part 69
             }
         elif build == 11:
             return {
@@ -194,22 +200,34 @@ def findSIviaST(build, part, st_list):
             }
         elif build == 12:
             return {
-                -1: ({'part': 32, 'purchase_order': 18}, 4),  # Part 32, now variant of part 69
-                -2: ({'part': 32, 'purchase_order': 33}, 28),  # Part 32, now variant of part 69
+                -1: ({'part': 32, 'purchase_order': 17}, 20),  # Part 32, now variant of part 69
+                -2: ({'part': 32, 'purchase_order': 18}, 12),  # Part 32, now variant of part 69
             }
         elif build == 14:
             return {
                 -1: ({'part': 32, 'purchase_order': 33}, 12),  # Part 32, now variant of part 69
             }
-    elif build in (10,) and part == 70: # Case-Spacer
-        return {-1: ({'part': 66, 'purchase_order': 14}, -1)}  # Part 66, now variant of part 67 & 70
-    elif build in (11,14) and part == 70: # SPACER
-        return {55: ({'part': 66, 'purchase_order': 14}, -1)}  # Part 66 (white spacer), now variant of part 67, variant of 70.
-    elif build in (12,) and part == 70: # Case-Spacer
-        return {
-            -1: ({'part': 10, 'purchase_order': 1}, 4),    # Part 10 (black spacer), now variant of part 67 & 70
-            -2: ({'part': 66, 'purchase_order': 14}, 28),  # Part 66 (white spacer), now variant of part 67 & 70
-        }
+    elif part == 70: # Case-Spacer
+        if build in (7,8,9):
+            return {-1: ({'part': 10, 'purchase_order': 1}, -1)}  # Part 10 (black spacer) was used to construct 10mm spacer.
+        if build == 9:
+            # 15mm spacers were cut down to 10mm
+            return { -1: ({'part': 10, 'purchase_order': 1}, -1)}  # Part 10 (black spacer), now variant of part 67 & 70
+        elif build == 10:
+            return {
+                # Actually needed 4x10mm spacers, but were cut-down from
+                -1: ({'part': 66, 'purchase_order': 14}, 8),  # Part 66 (white spacer), now variant of part 67 & 70
+                -2: ({'part': 10, 'purchase_order': 1}, 16),  # Part 10 (black spacer), now variant of part 67 & 70
+                # 10mm spacer was needed, but was cutdown from 15mm black spacer above
+                #-3: ({'part': 11, 'purchase_order': 3}, 4),  # Part 11 (10mm spacer), now variant of part 67 & 70
+            }
+        elif build in (11,14):
+            return {55: ({'part': 66, 'purchase_order': 14}, -1)}  # Part 66 (white spacer), now variant of part 67, variant of 70.
+        elif build in (12,):
+            return {
+                -1: ({'part': 10, 'purchase_order': 1}, 4),    # Part 10 (black spacer), now variant of part 67 & 70
+                -2: ({'part': 66, 'purchase_order': 14}, 28),  # Part 66 (white spacer), now variant of part 67 & 70
+            }
 
     for st in st_list:
         if 'buildorder' in st['deltas'] and st['deltas']['buildorder'] == build:
