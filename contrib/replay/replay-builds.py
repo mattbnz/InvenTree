@@ -377,6 +377,17 @@ def buildOutput(build, si, dsSerials, dst):
         if bi:
             logging.info(f' - {aid["part"]} x {bi["quantity"]} is assigned via bi #{bi["pk"]}')
             continue
+        if aid['part'] == 19:  # ESP 32
+            # Fix-up which ESP is in which board, based on stocktake.
+            if build == 1 and si["serial"] == "2":
+                aid['serial'] = "B-1"
+                aid['purchase_order'] = 9
+            elif build == 4 and si["serial"] == "102":
+                aid['serial'] = "I-0"
+                aid['purchase_order'] = 7
+            elif build == 4 and si["serial"] == "100":
+                aid['serial'] = "A-1"
+                aid['purchase_order'] = 4
         dsi = find_stockitem_part_po_serial(aid['part'], aid['purchase_order'], aid['serial'], dst_stock.values())
         if not dsi:
             logging.critical(f'Could not find matching allocation for {aid["part"]} with serial {aid["serial"]}')
