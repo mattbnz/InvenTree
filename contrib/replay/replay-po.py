@@ -42,6 +42,10 @@ def create_li(src_li, po_pk):
         # Price is "zero" since digikey shipped replacement correct LEDs.
         src_li['part'] = 76  # supplier-part, not part (!!)
         pp = 0.0001
+    elif po_pk == 36 and src_li['part'] == 69:
+        # Graley sent more than ordered so update the PO to record that.
+        src_li['quantity'] = 54
+        pp = 1.5181  # 81.999 / 54
     data = {
         "order": po_pk,
         "part": src_li['part'],
@@ -126,6 +130,8 @@ for k in sorted(src_pos.keys()):
                 'status': 10,
                 'location': src_lis[li]['destination'],
             }
+            if k == 36 and src_lis[li]['part'] == 69:
+                i['quantity'] = 54  # Graley sent more than ordered so update the PO to record that.
             if i['supplier_part'] in TRACKABLES:
                 i['batch_code'] = batch_codes[dst['pk']]
             received.append(i)
