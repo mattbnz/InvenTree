@@ -146,41 +146,52 @@ def findBS(part, bs_list):
 
 def findSIviaST(build, part, st_list):
     rv = dict()
-    # We have some missing data for SSD in the original DB, so fake up our best guess...
-    # This is because these were built before our interim tracking solution landed.
-    if build == 1 and part == 20:
-        return {
-            -1: ({'purchase_order': 9}, -1)
-        }
-    elif build == 13 and part == 20:
-        rv[-1] = ({'purchase_order': 8}, 5)
+    if part == 15:  # WS2812B
+        # LEDs in build 13 were misallocated somehow.
+        if build == 13:
+            return {
+                -1: ({'purchase_order': 13}, 8),
+                -2: ({'purchase_order': 27}, 25)
+                }
+    elif part == 20:  # SSD
+        # We have some missing data for SSD in the original DB, so fake up our best guess...
+        # This is because these were built before our interim tracking solution landed.
+        if build == 1:
+            return {
+                -1: ({'purchase_order': 9}, -1)
+            }
+        elif build == 13:
+            rv[-1] = ({'purchase_order': 8}, 5)
     # And some missing data for the BoMs which we are fixing on replay
     # no ST in src, because the bom items were missing!
     elif part == 28:
         return {-1: ({'purchase_order': 15}, -1)}
-    elif build in (7,8) and part == 41:  # Prototype covers
-        return {-1: ({'purchase_order': 21}, -1)}
-    elif build == 9 and part == 34:  # Prototype cases
-        return {-1: ({'purchase_order': 19}, -1)}  # tentative, guessed...
-    elif build == 11 and part == 34:  # Cases
-        return {-1: ({'part': 55, 'purchase_order': 25}, -1)}  # co2mon.nz white cases
-    elif build == 12 and part == 34:  # Cases
-        return {
-            -1: ({'part': 56, 'purchase_order': 25}, 1),  # co2mon.nz black case
-            -2: ({'part': 55, 'purchase_order': 25}, 2),  # co2mon.nz white cases
-            -3: ({'part': 55, 'purchase_order': 31}, 5),  # co2mon.nz white cases
-        }
-    elif build == 14 and part == 34:  # Cases
-        return {-1: ({'part': 55, 'purchase_order': 31}, -1)}  # co2mon.nz white cases
-    elif build in (10,11, 12, 14) and part == 40:  # Covers
-        return {-1: ({'purchase_order': 20}, -1)}  # fiasco 8mm covers
-    elif build == 10 and part == 34:
-        return {
-            37: (src_stock[37], 1),  # 10mm, tentative, guessed...
-            38: (src_stock[38], 1),  # 15mm, tentative, guessed...
-            39: (src_stock[39], 2),  # proto, tentative, guessed...
-            58: (src_stock[58], 2),  # black, tentative, guessed...
+    elif part == 34:   # Cases
+        if build == 9:
+            return {-1: ({'purchase_order': 19}, -1)}  # tentative, guessed...
+        elif build == 10:
+            return {
+                37: (src_stock[37], 1),  # 10mm, tentative, guessed...
+                38: (src_stock[38], 1),  # 15mm, tentative, guessed...
+                39: (src_stock[39], 2),  # proto, tentative, guessed...
+                58: (src_stock[58], 2),  # black, tentative, guessed...
+                }
+        elif build == 11:
+            return {-1: ({'part': 55, 'purchase_order': 25}, -1)}  # co2mon.nz white cases
+        elif build == 12:
+            return {
+                -1: ({'part': 56, 'purchase_order': 25}, 1),  # co2mon.nz black case
+                -2: ({'part': 55, 'purchase_order': 25}, 2),  # co2mon.nz white cases
+                -3: ({'part': 55, 'purchase_order': 31}, 5),  # co2mon.nz white cases
             }
+        elif build == 14:
+            return {-1: ({'part': 55, 'purchase_order': 31}, -1)}  # co2mon.nz white cases
+    elif part == 41:  # Prototype covers
+        if build in (7,8):
+            return {-1: ({'purchase_order': 21}, -1)}
+    elif part == 40:  # Covers
+        if build in (10,11, 12, 14):
+            return {-1: ({'purchase_order': 20}, -1)}  # fiasco 8mm covers
     # And other parts which we turned into variants, so it can't find them easily
     elif part == 69: # Case Screw
         # Need to be specific about which build used which PO :(
