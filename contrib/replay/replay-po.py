@@ -37,6 +37,11 @@ def create_li(src_li, po_pk):
     pp = 0.0001  # Default to 0.001 if part was free (BoM costs require price)
     if src_li['purchase_price'] != '0.0000':
         pp = src_li['purchase_price']
+    if po_pk == 3 and src_li['part'] == 15:
+        # Wrong LEDs were shipped, transfer to a new part matching was received.
+        # Price is "zero" since digikey shipped replacement correct LEDs.
+        src_li['part'] = 76  # supplier-part, not part (!!)
+        pp = 0.0001
     data = {
         "order": po_pk,
         "part": src_li['part'],
