@@ -536,3 +536,63 @@ logging.info("Processing build orders")
 last_build = ""
 for k in sorted(src_bos.keys()):
     processBuild(k)
+
+# Reconcile discarded/broken builds where parts were re-used with the DB.
+dst_stock = getDict('dev', 'stock/')
+# 11 was removed from it's case (which got reused), and never had a screen populated, or it was stolen
+note = "PCB #11 removed from case to workbench, case re-used; precise date unknown"
+monitor = dst_stock[288]
+if monitor['serial']  != "11":
+    logging.critical(f'ERROR, stock item ID for CO2 Monitor #11 is not as expected!')
+    sys.exit(1)
+board = dst_stock[209]
+if board['serial'] != "11":
+    logging.critical(f'ERROR, stock item ID for CO2 Monitor PCB #11 is not as expected!')
+    sys.exit(1)
+if board['belongs_to'] == monitor["pk"]:
+    # Remove the PCB from the case
+    data = {
+        'location': 2,
+        'note': note,
+    }
+    response = request(requests.post, 'dev', f'stock/{board["pk"]}/uninstall/', json=data)
+    logging.info(f'Removed {board["pk"]} from {monitor["pk"]}: {note}')
+else:
+    logging.info(f'Board {board["pk"]} appears to be already removed from {monitor["pk"]}')
+# Put cover back in stock
+dsT = getDict('dev', f'stock/track/')
+items = list(filter(lambda x: x['deltas'].get('buildorder',0) == monitor['build'] and x['tracking_type'] == 57, dsT.values()))
+did = {}
+for t in items:
+    if dst_stock[t['item']]['part'] != 39:  # Case, Case Cover
+        #print(f'Skipping {t["item"]} because {dst_stock[t["item"]]["part"]} not case cover')
+        continue
+    si = dst_stock[t['item']]
+    old = si["pk"]
+    splits = list(filter(lambda x: x['item'] == old and x['tracking_type'] == 42, dsT.values()))
+    if len(splits) == 0:
+        tree_id = get_field('stock_stockitem', 'tree_id', 'id', si['pk'])
+        newId = raw_exec("INSERT INTO stock_stockitem (quantity, updated, review_needed, delete_on_deplete, status, location_id, part_id, "+
+                         "supplier_part_id,purchase_order_id, level, lft, rght, tree_id, link, is_building, purchase_price_currency, "+
+                         "purchase_price, serial_int, barcode_data, barcode_hash, metadata, parent_id)" +
+                "VALUES (1, datetime(), 0, 1, 10, 2, ?, ?, ?, 1, 1, 2, ?, '', 0, ?, ?, 0, '', '', '{}', ?)",
+                ( si['part'], si['supplier_part'], si['purchase_order'], tree_id, si['purchase_price_currency'],si['purchase_price'], si['pk'])
+        )
+        raw_exec("INSERT INTO stock_stockitemtracking (date, item_id, user_id, tracking_type, notes, deltas) VALUES (datetime(), ?, ?, ?, ?, ?)", (
+            (newId, 2, 40, note, f'{{"stockitem": {old} , "quantity": 1}}')
+        ))
+        update_field_by_id('stock_stockitem', si['pk'], 'quantity', 1)
+        raw_exec("INSERT INTO stock_stockitemtracking (date, item_id, user_id, tracking_type, notes, deltas) VALUES (datetime(), ?, ?, ?, ?, ?)", (
+            (old, 2, 42, note, f'{{"stockitem": {newId}, "removed": 1, "quantity": 1}}')
+        ))
+        logging.info(f' - Created new stock item {newId} for part {si["part"]}')
+        did[si['part']] = True
+    else:
+        logging.info(f' - New stock item for part {si["part"]} appears to already exist')
+        did[si['part']] = True
+if list(sorted(did.keys())) != [39]:
+    logging.critical(f'ERROR: Did not update cover records for #11! Only did {did}')
+    sys.exit(1)
+# Mark assembled monitor as destroyed and PCB as needing attention
+response = request(requests.patch, 'dev', f'stock/{monitor["pk"]}/', json={"status":60})
+response = request(requests.patch, 'dev', f'stock/{board["pk"]}/', json={"status":50})

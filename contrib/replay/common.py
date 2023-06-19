@@ -82,6 +82,16 @@ def getOwner(owner_id, label):
             return owner['pk']
     return None
 
+def raw_exec(query, data):
+    db = sqlite3.connect(os.path.expanduser('~/database.sqlite3'))
+    cur = db.cursor()
+    res = cur.execute(query, data)
+    cur.close()
+    db.commit()
+    if res.rowcount != 1:
+        raise Exception(f"Failed to execute {query} with {data}")
+    return res.lastrowid
+
 def update_field_by_id(table, pk, field, data):
     db = sqlite3.connect(os.path.expanduser('~/database.sqlite3'))
     cur = db.cursor()
@@ -140,7 +150,6 @@ def update_field_like(table, limitfield, like, field, data):
     if res.rowcount <= 0:
         raise Exception(f"Failed to update {table} {limitfield} like {like} {field} to {data}")
 
-
 def find_ids(table, w1field, w1like, w2field, w2val):
     db = sqlite3.connect(os.path.expanduser('~/database.sqlite3'))
     cur = db.cursor()
@@ -148,5 +157,13 @@ def find_ids(table, w1field, w1like, w2field, w2val):
     rv = map(lambda x: x[0], res.fetchall())
     cur.close()
     return rv
+
+def get_field(table, gfield, wfield, wval):
+    db = sqlite3.connect(os.path.expanduser('~/database.sqlite3'))
+    cur = db.cursor()
+    res = cur.execute(f"SELECT {gfield} FROM {table} WHERE {wfield} = ?", (wval,))
+    rv = res.fetchall()
+    cur.close()
+    return rv[0][0]
 
 owners = getDict('dev', 'user/owner/')
