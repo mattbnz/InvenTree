@@ -2,7 +2,7 @@
 # the original logic implemented in e257e47 had some bugs (fixed in 2a03fa8)
 # hence the need to recalculate...
 #
-# run as python manage.py < scripts/recalculate_built_prices.py
+# run as python manage.py shell < scripts/recalculate_built_prices.py
 from django.db.models import Avg
 
 from InvenTree.status_codes import StockHistoryCode, BuildStatus
@@ -18,6 +18,10 @@ for b in builds:
   q = {}
   for i in b.untracked_bom_items:
     q[i.sub_part.pk] = i.quantity
+    # including descendants, in case the BoM item is a template/variant part
+    for i2 in i.sub_part.get_descendants(include_self=False):
+      q[i2.pk] = i.quantity
+
   # Find untracked stock items which contributed to this build
   base_price = 0.0
   qs = StockItemTracking.objects.filter(tracking_type=StockHistoryCode.BUILD_CONSUMED, deltas__buildorder=b.pk)
