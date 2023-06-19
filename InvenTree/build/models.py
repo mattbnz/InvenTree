@@ -9,7 +9,7 @@ from django.contrib.auth.models import User
 from django.core.exceptions import ValidationError
 from django.core.validators import MinValueValidator
 from django.db import models, transaction
-from django.db.models import Avg, Sum, Q
+from django.db.models import Sum, Q
 from django.db.models.functions import Coalesce
 from django.db.models.signals import post_save
 from django.dispatch.dispatcher import receiver
@@ -879,16 +879,27 @@ class Build(MPTTModel, InvenTree.models.InvenTreeBarcodeMixin, InvenTree.models.
         # Build lookup of bom quantities
         q = {}
         for i in self.untracked_bom_items:
-            q[i.sub_part.pk] = i.quantity
+            q[i.sub_part.pk] = (i.sub_part.pk, i.quantity)
             # including descendants, in case the BoM item is a template/variant part.
             for i2 in i.sub_part.get_descendants(include_self=False):
-                q[i2.pk] = i.quantity
+                q[i2.pk] = (i.sub_part.pk, i.quantity)
+
+        si = {}
+        qs = untracked_items.values('stock_item__part__pk', 'stock_item__part__name', 'stock_item__quantity', 'stock_item__purchase_price')
+        for item in qs.all():
+            bi, biq = q[item['stock_item__part__pk']]
+            si.setdefault(bi, [])
+            for _x in range(0, int(item['stock_item__quantity'])):
+                si[bi].append(float(item['stock_item__purchase_price']))
 
         purchase_price = 0.0
-        qs = untracked_items.values('stock_item__part__pk', 'stock_item__part__name')
-        for item in qs.annotate(avg_price=Avg('stock_item__purchase_price')):
-            price = item['avg_price'] * q[item['stock_item__part__pk']]
-            purchase_price += float(price)
+        for bi, pl in si.items():
+            _, biq = q[bi]
+            partprice = 0.0
+            for n in range(0, int(biq)):
+                pli = (int(biq) * self.completed) + n
+                partprice += pl[pli]
+            purchase_price += partprice
 
         # List the allocated BuildItem objects for the given output
         allocated_items = output.items_to_install.all()
