@@ -46,6 +46,10 @@ def create_li(src_li, po_pk):
         # Graley sent more than ordered so update the PO to record that.
         src_li['quantity'] = 54
         pp = 1.5181  # 81.999 / 54
+    elif po_pk == 21 and src_li['part'] == 55:
+        # Stocktake suggests I made 6 more 2mm cases than recorded, so add them
+        # in so Fiasco 8mm case stock balances.
+        src_li['quantity'] += 6
     data = {
         "order": po_pk,
         "part": src_li['part'],
@@ -132,6 +136,8 @@ for k in sorted(src_pos.keys()):
             }
             if k == 36 and src_lis[li]['part'] == 69:
                 i['quantity'] = 54  # Graley sent more than ordered so update the PO to record that.
+            elif k == 21 and src_lis[li]['part'] == 55:
+                i['quantity'] += 6  # I made more. See comment above.
             if i['supplier_part'] in TRACKABLES:
                 i['batch_code'] = batch_codes[dst['pk']]
             received.append(i)

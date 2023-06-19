@@ -190,7 +190,9 @@ def findSIviaST(build, part, st_list):
         if build in (7,8):
             return {-1: ({'purchase_order': 21}, -1)}
     elif part == 40:  # Covers
-        if build in (10,11, 12, 14):
+        if build == 10:
+            return {-1: ({'purchase_order': 21}, -1)}  # Prototype covers, not sure if this is 100% correct.
+        elif build in (11, 12, 14):
             return {-1: ({'purchase_order': 20}, -1)}  # fiasco 8mm covers
     # And other parts which we turned into variants, so it can't find them easily
     elif part == 69: # Case Screw
